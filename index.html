@@ -533,17 +533,20 @@
     <div id="toast" class="toast"></div>
 
     <script>
+        // API base URL
+        const API_URL = '/api';
+
         // Data storage
         let workouts = [];
         let meals = [];
 
         // Initialize app
-        document.addEventListener('DOMContentLoaded', () => {
-            loadData();
+        document.addEventListener('DOMContentLoaded', async () => {
             updateDate();
-            updateDashboard();
+            await loadData();
             renderWorkouts();
             renderMeals();
+            await updateDashboard();
         });
 
         // Tab switching
@@ -564,57 +567,82 @@
         }
 
         // Fitness form submission
-        document.getElementById('fitnessForm').addEventListener('submit', (e) => {
+        document.getElementById('fitnessForm').addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            const workout = {
-                id: Date.now(),
+            const workoutData = {
                 type: document.getElementById('exerciseType').value,
                 duration: parseInt(document.getElementById('duration').value),
                 calories: parseInt(document.getElementById('caloriesBurned').value),
-                notes: document.getElementById('notes').value,
-                timestamp: new Date().toISOString(),
-                date: getToday()
+                notes: document.getElementById('notes').value
             };
 
-            workouts.push(workout);
-            saveData();
-            e.target.reset();
-            renderWorkouts();
-            updateDashboard();
-            showToast('Workout logged successfully! 💪');
+            try {
+                const response = await fetch(`${API_URL}/workouts`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(workoutData)
+                });
+
+                if (response.ok) {
+                    e.target.reset();
+                    await loadData();
+                    renderWorkouts();
+                    await updateDashboard();
+                    showToast('Workout logged successfully! 💪');
+                } else {
+                    showToast('Failed to log workout');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showToast('Failed to log workout');
+            }
         });
 
         // Nutrition form submission
-        document.getElementById('nutritionForm').addEventListener('submit', (e) => {
+        document.getElementById('nutritionForm').addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            const meal = {
-                id: Date.now(),
+            const mealData = {
                 type: document.getElementById('mealType').value,
                 name: document.getElementById('foodName').value,
                 calories: parseInt(document.getElementById('calories').value),
                 protein: parseFloat(document.getElementById('protein').value),
                 carbs: parseFloat(document.getElementById('carbs').value),
-                fats: parseFloat(document.getElementById('fats').value),
-                timestamp: new Date().toISOString(),
-                date: getToday()
+                fats: parseFloat(document.getElementById('fats').value)
             };
 
-            meals.push(meal);
-            saveData();
-            e.target.reset();
-            renderMeals();
-            updateDashboard();
-            showToast('Meal logged successfully! 🥗');
+            try {
+                const response = await fetch(`${API_URL}/meals`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(mealData)
+                });
+
+                if (response.ok) {
+                    e.target.reset();
+                    await loadData();
+                    renderMeals();
+                    await updateDashboard();
+                    showToast('Meal logged successfully! 🥗');
+                } else {
+                    showToast('Failed to log meal');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showToast('Failed to log meal');
+            }
         });
 
         // Render workouts
         function renderWorkouts() {
             const container = document.getElementById('workoutList');
-            const todayWorkouts = getTodayWorkouts();
 
-            if (todayWorkouts.length === 0) {
+            if (workouts.length === 0) {
                 container.innerHTML = `
                     <div class="empty-state">
                         <div class="empty-state-icon">🏃</div>
@@ -624,7 +652,7 @@
                 return;
             }
 
-            container.innerHTML = todayWorkouts.map(workout => `
+            container.innerHTML = workouts.map(workout => `
                 <div class="entry-item">
                     <div class="entry-header">
                         <div class="entry-title">${workout.type}</div>
@@ -649,9 +677,8 @@
         // Render meals
         function renderMeals() {
             const container = document.getElementById('mealList');
-            const todayMeals = getTodayMeals();
 
-            if (todayMeals.length === 0) {
+            if (meals.length === 0) {
                 container.innerHTML = `
                     <div class="empty-state">
                         <div class="empty-state-icon">🍽️</div>
@@ -661,7 +688,7 @@
                 return;
             }
 
-            container.innerHTML = todayMeals.map(meal => `
+            container.innerHTML = meals.map(meal => `
                 <div class="entry-item">
                     <div class="entry-header">
                         <div class="entry-title">${meal.type} - ${meal.name}</div>
@@ -689,39 +716,34 @@
         }
 
         // Update dashboard
-        function updateDashboard() {
-            const todayWorkouts = getTodayWorkouts();
-            const todayMeals = getTodayMeals();
+        async function updateDashboard() {
+            try {
+                const response = await fetch(`${API_URL}/stats/today`);
+                if (!response.ok) return;
 
-            // Calculate totals
-            const totalWorkouts = todayWorkouts.length;
-            const totalCaloriesBurned = todayWorkouts.reduce((sum, w) => sum + w.calories, 0);
-            const totalCaloriesConsumed = todayMeals.reduce((sum, m) => sum + m.calories, 0);
-            const netCalories = totalCaloriesConsumed - totalCaloriesBurned;
+                const stats = await response.json();
 
-            // Update stats
-            document.getElementById('totalWorkouts').textContent = totalWorkouts;
-            document.getElementById('totalCaloriesBurned').textContent = totalCaloriesBurned;
-            document.getElementById('totalCaloriesConsumed').textContent = totalCaloriesConsumed;
-            document.getElementById('netCalories').textContent = netCalories;
+                // Update stats
+                document.getElementById('totalWorkouts').textContent = stats.totalWorkouts;
+                document.getElementById('totalCaloriesBurned').textContent = stats.totalCaloriesBurned;
+                document.getElementById('totalCaloriesConsumed').textContent = stats.totalCaloriesConsumed;
+                document.getElementById('netCalories').textContent = stats.netCalories;
 
-            // Calculate macros
-            const totalProtein = todayMeals.reduce((sum, m) => sum + m.protein, 0);
-            const totalCarbs = todayMeals.reduce((sum, m) => sum + m.carbs, 0);
-            const totalFats = todayMeals.reduce((sum, m) => sum + m.fats, 0);
+                // Macro goals
+                const proteinGoal = 150;
+                const carbsGoal = 200;
+                const fatsGoal = 70;
 
-            // Macro goals (can be made configurable)
-            const proteinGoal = 150;
-            const carbsGoal = 200;
-            const fatsGoal = 70;
+                // Update macro progress
+                updateMacroProgress('protein', stats.totalProtein, proteinGoal);
+                updateMacroProgress('carbs', stats.totalCarbs, carbsGoal);
+                updateMacroProgress('fats', stats.totalFats, fatsGoal);
 
-            // Update macro progress
-            updateMacroProgress('protein', totalProtein, proteinGoal);
-            updateMacroProgress('carbs', totalCarbs, carbsGoal);
-            updateMacroProgress('fats', totalFats, fatsGoal);
-
-            // Update recent activity
-            updateRecentActivity();
+                // Update recent activity
+                updateRecentActivity();
+            } catch (error) {
+                console.error('Error updating dashboard:', error);
+            }
         }
 
         function updateMacroProgress(macro, current, goal) {
@@ -732,12 +754,10 @@
 
         function updateRecentActivity() {
             const container = document.getElementById('recentActivity');
-            const todayWorkouts = getTodayWorkouts();
-            const todayMeals = getTodayMeals();
 
             const allActivities = [
-                ...todayWorkouts.map(w => ({ ...w, activityType: 'workout' })),
-                ...todayMeals.map(m => ({ ...m, activityType: 'meal' }))
+                ...workouts.map(w => ({ ...w, activityType: 'workout' })),
+                ...meals.map(m => ({ ...m, activityType: 'meal' }))
             ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 5);
 
             if (allActivities.length === 0) {
@@ -790,35 +810,47 @@
         }
 
         // Delete functions
-        function deleteWorkout(id) {
-            workouts = workouts.filter(w => w.id !== id);
-            saveData();
-            renderWorkouts();
-            updateDashboard();
-            showToast('Workout deleted');
+        async function deleteWorkout(id) {
+            try {
+                const response = await fetch(`${API_URL}/workouts/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    await loadData();
+                    renderWorkouts();
+                    await updateDashboard();
+                    showToast('Workout deleted');
+                } else {
+                    showToast('Failed to delete workout');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showToast('Failed to delete workout');
+            }
         }
 
-        function deleteMeal(id) {
-            meals = meals.filter(m => m.id !== id);
-            saveData();
-            renderMeals();
-            updateDashboard();
-            showToast('Meal deleted');
+        async function deleteMeal(id) {
+            try {
+                const response = await fetch(`${API_URL}/meals/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    await loadData();
+                    renderMeals();
+                    await updateDashboard();
+                    showToast('Meal deleted');
+                } else {
+                    showToast('Failed to delete meal');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showToast('Failed to delete meal');
+            }
         }
 
         // Helper functions
-        function getToday() {
-            return new Date().toISOString().split('T')[0];
-        }
-
-        function getTodayWorkouts() {
-            return workouts.filter(w => w.date === getToday());
-        }
-
-        function getTodayMeals() {
-            return meals.filter(m => m.date === getToday());
-        }
-
         function formatTime(timestamp) {
             return new Date(timestamp).toLocaleTimeString('en-US', {
                 hour: 'numeric',
@@ -836,18 +868,23 @@
             }, 3000);
         }
 
-        // Data persistence
-        function saveData() {
-            localStorage.setItem('fittrack_workouts', JSON.stringify(workouts));
-            localStorage.setItem('fittrack_meals', JSON.stringify(meals));
-        }
+        // Data loading from API
+        async function loadData() {
+            try {
+                const [workoutsRes, mealsRes] = await Promise.all([
+                    fetch(`${API_URL}/workouts/today`),
+                    fetch(`${API_URL}/meals/today`)
+                ]);
 
-        function loadData() {
-            const savedWorkouts = localStorage.getItem('fittrack_workouts');
-            const savedMeals = localStorage.getItem('fittrack_meals');
-
-            if (savedWorkouts) workouts = JSON.parse(savedWorkouts);
-            if (savedMeals) meals = JSON.parse(savedMeals);
+                if (workoutsRes.ok) {
+                    workouts = await workoutsRes.json();
+                }
+                if (mealsRes.ok) {
+                    meals = await mealsRes.json();
+                }
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
         }
     </script>
 </body>
